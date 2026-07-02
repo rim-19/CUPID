@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import prisma from './server/prisma.js';
 import { sessionMiddleware, csrfProtection } from './server/auth.js';
 import { rateLimit } from './server/ratelimit.js';
-import apiRouter from './server/api.js';
+import apiRouter, { stripeWebhook } from './server/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
@@ -72,6 +72,10 @@ if (process.env.NODE_ENV !== 'test') {
     next();
   });
 }
+
+// Stripe webhook needs the raw, unparsed body to verify its signature, so it is
+// mounted before the JSON parser and outside the /api session/CSRF chain.
+app.post('/api/stripe/webhook', express.raw({ type: '*/*' }), stripeWebhook);
 
 app.use(express.json({ limit: '64kb' }));
 // The email-link newsletter pages submit a plain HTML form (urlencoded).

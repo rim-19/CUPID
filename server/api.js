@@ -7,6 +7,7 @@ import prisma from './prisma.js';
 import * as auth from './auth.js';
 import * as mailer from './mailer.js';
 import * as storage from './storage.js';
+import * as stripe from './stripe.js';
 import { rateLimit } from './ratelimit.js';
 import { validatePassword, isEmail } from './validate.js';
 import { isPasswordPwned } from './pwned.js';
@@ -23,6 +24,7 @@ const FORMAT_BY_EXT = { pdf: 'PDF', epub: 'EPUB', mobi: 'MOBI' };
 const CONTENT_TYPE = { PDF: 'application/pdf', EPUB: 'application/epub+zip', MOBI: 'application/x-mobipocket-ebook' };
 const DOWNLOAD_MAX = Number(process.env.CUPID_DOWNLOAD_MAX) || 5;
 const DOWNLOAD_TTL_MS = Number(process.env.CUPID_DOWNLOAD_TTL_MS) || 30 * 24 * 60 * 60 * 1000; // 30 days
+const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 /* Wrap async handlers so a rejected promise reaches Express' error handler
    instead of hanging the request. */
@@ -239,6 +241,45 @@ async function mergeGuestInto(sessionId, userId) {
     if (!has) await prisma.rsvp.create({ data: { userId, eventId: r.eventId } });
   }
   await prisma.rsvp.deleteMany({ where: { sessionId } });
+}
+
+/* Finalize a paid order exactly once. Idempotent: the PENDING -> PAID flip is an
+   atomic claim, so whichever path runs first (the confirm redirect or the Stripe
+   webhook) does the real work - decrement stock, clear the user's cart, and mint
+   the download grants - and any later call is a no-op. Only the claiming call
+   gets the raw download links back (tokens are stored hashed). */
+async function finalizeOrder(orderId) {
+  const claim = await prisma.order.updateMany({ where: { id: orderId, status: 'PENDING' }, data: { status: 'PAID' } });
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order) return { order: null, downloads: [], claimed: false };
+  if (claim.count === 0) return { order, downloads: [], claimed: false };
+
+  for (const it of order.items) {
+    if (!it.bookId) continue;
+    // Payment is already taken, so decrement best-effort; the gte guard just
+    // avoids driving stock negative if it sold out in the meantime.
+    await prisma.book.updateMany({ where: { id: it.bookId, stock: { gte: it.qty } }, data: { stock: { decrement: it.qty } } });
+  }
+
+  if (order.userId) {
+    const cart = await prisma.cart.findUnique({ where: { userId: order.userId } });
+    if (cart) await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+  }
+
+  const downloads = [];
+  for (const it of order.items) {
+    if (!it.bookId) continue;
+    const book = await prisma.book.findUnique({ where: { id: it.bookId } });
+    if (!book || !book.digitalGift) continue;
+    const asset = await prisma.bookAsset.findFirst({ where: { bookId: it.bookId, active: true } });
+    if (!asset) continue;
+    const raw = genToken();
+    await prisma.downloadGrant.create({
+      data: { orderId: order.id, userId: order.userId, bookId: it.bookId, tokenHash: hashToken(raw), maxDownloads: DOWNLOAD_MAX, expiresAt: new Date(Date.now() + DOWNLOAD_TTL_MS) },
+    });
+    downloads.push({ title: it.titleSnapshot, url: '/api/downloads/' + raw });
+  }
+  return { order, downloads, claimed: true };
 }
 
 function htmlPage(title, body) {
@@ -682,75 +723,86 @@ router.delete('/cart/:title', ah(async (req, res) => {
   res.json({ cart: cartLines(await getCart(req)) });
 }));
 
+/* Start checkout. With Stripe configured this creates a PENDING order and a
+   hosted Checkout Session, returning its URL for the client to redirect to;
+   payment is confirmed later by /checkout/confirm and the webhook. With no
+   Stripe key it falls back to an instant, no-payment checkout (dev). */
 router.post('/cart/checkout', ah(async (req, res) => {
   const cart = await getCart(req);
   if (!cart.items.length) return res.status(400).json({ error: 'Your bag is empty.' });
+  // Soft pre-check; the authoritative stock guard runs atomically at finalize.
+  for (const it of cart.items) {
+    if (it.qty > it.book.stock) return res.status(409).json({ error: `Only ${it.book.stock} of "${it.book.title}" left.` });
+  }
   const subtotalCents = cart.items.reduce((n, it) => n + it.book.priceCents * it.qty, 0);
   const email = req.user ? req.user.email : 'guest@cupid.local';
 
-  let order;
-  try {
-    order = await prisma.$transaction(async (tx) => {
-      // Atomically decrement stock. The conditional update only succeeds while
-      // enough stock remains, so concurrent checkouts of the last copy cannot
-      // oversell: the loser's updateMany matches 0 rows and we abort.
-      for (const it of cart.items) {
-        const r = await tx.book.updateMany({
-          where: { id: it.bookId, stock: { gte: it.qty } },
-          data: { stock: { decrement: it.qty } },
-        });
-        if (r.count !== 1) throw Object.assign(new Error('out of stock'), { code: 'OUT_OF_STOCK', title: it.book.title });
-      }
-      const created = await tx.order.create({
-        data: {
-          userId: req.user ? req.user.id : null,
-          email,
-          status: 'PAID', // TODO: becomes PENDING until the Stripe webhook confirms payment
-          subtotalCents,
-          totalCents: subtotalCents,
-          items: {
-            create: cart.items.map((it) => ({
-              bookId: it.bookId,
-              titleSnapshot: it.book.title,
-              unitPriceCents: it.book.priceCents,
-              qty: it.qty,
-            })),
-          },
-        },
-        include: { items: true },
-      });
-      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-      return created;
-    });
-  } catch (e) {
-    if (e && e.code === 'OUT_OF_STOCK') return res.status(409).json({ error: `Sorry, "${e.title}" just sold out.` });
-    throw e;
-  }
-
-  // Gift a downloadable copy for each purchased book that has one. The raw token
-  // is returned once (in the link) and only its hash is stored.
-  // NOTE: once Stripe is wired, move this to the payment-confirmed webhook so a
-  // digital good is never released before the charge clears.
-  const downloads = [];
-  for (const it of cart.items) {
-    if (!it.book.digitalGift) continue;
-    const asset = await prisma.bookAsset.findFirst({ where: { bookId: it.bookId, active: true } });
-    if (!asset) continue;
-    const raw = genToken();
-    await prisma.downloadGrant.create({
-      data: {
-        orderId: order.id,
-        userId: req.user ? req.user.id : null,
-        bookId: it.bookId,
-        tokenHash: hashToken(raw),
-        maxDownloads: DOWNLOAD_MAX,
-        expiresAt: new Date(Date.now() + DOWNLOAD_TTL_MS),
+  const order = await prisma.order.create({
+    data: {
+      userId: req.user ? req.user.id : null,
+      email,
+      status: 'PENDING',
+      subtotalCents,
+      totalCents: subtotalCents,
+      items: {
+        create: cart.items.map((it) => ({
+          bookId: it.bookId,
+          titleSnapshot: it.book.title,
+          unitPriceCents: it.book.priceCents,
+          qty: it.qty,
+        })),
       },
+    },
+    include: { items: true },
+  });
+
+  if (stripe.stripeReady()) {
+    const session = await stripe.getStripe().checkout.sessions.create({
+      mode: 'payment',
+      customer_email: req.user ? req.user.email : undefined,
+      line_items: cart.items.map((it) => ({
+        quantity: it.qty,
+        price_data: {
+          currency: (it.book.currency || 'usd').toLowerCase(),
+          unit_amount: it.book.priceCents,
+          product_data: { name: it.book.title, description: it.book.author || undefined },
+        },
+      })),
+      metadata: { orderId: order.id },
+      success_url: `${APP_URL}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${APP_URL}/?checkout=cancel`,
     });
-    downloads.push({ title: it.book.title, url: '/api/downloads/' + raw });
+    await prisma.order.update({ where: { id: order.id }, data: { stripeSessionId: session.id } });
+    return res.json({ url: session.url });
   }
 
-  res.json({ order: publicOrder(order), downloads });
+  // No Stripe: finalize immediately so local/dev still completes an order.
+  const result = await finalizeOrder(order.id);
+  res.json({ order: publicOrder(result.order), downloads: result.downloads });
+}));
+
+/* Called when the browser returns from Stripe. Verifies the session with Stripe
+   and finalizes the order (idempotent with the webhook). */
+router.get('/checkout/confirm', ah(async (req, res) => {
+  const sessionId = String(req.query.session_id || '');
+  if (!sessionId) return res.status(400).json({ error: 'Missing session.' });
+  if (!stripe.stripeReady()) return res.status(503).json({ error: 'Payments are not configured.' });
+  const session = await stripe.getStripe().checkout.sessions.retrieve(sessionId);
+  const orderId = session.metadata && session.metadata.orderId;
+  if (!orderId) return res.status(404).json({ error: 'Order not found.' });
+
+  if (session.payment_status !== 'paid') {
+    const o = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    return res.json({ order: o ? publicOrder(o) : null, downloads: [], paid: false });
+  }
+  if (typeof session.payment_intent === 'string') {
+    await prisma.order.update({ where: { id: orderId }, data: { stripePaymentIntentId: session.payment_intent } }).catch(() => {});
+  }
+  const result = await finalizeOrder(orderId);
+  // Also clear the current session's cart (covers guest checkout).
+  const cart = await prisma.cart.findFirst({ where: auth.ownerWhere(req) });
+  if (cart) await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+  res.json({ order: result.order ? publicOrder(result.order) : null, downloads: result.downloads, paid: true });
 }));
 
 router.get('/orders', auth.requireAuth, ah(async (req, res) => {
@@ -1018,5 +1070,35 @@ router.post('/contact', ah(async (req, res) => {
   await mailer.send({ to: process.env.CONTACT_TO || 'team@cupid.local', subject: 'New contact message', text: `${name} <${email}>: ${message}` });
   res.json({ ok: true });
 }));
+
+/* Stripe webhook. Mounted in server.js with a RAW body parser (before json) so
+   the signature can be verified. Authoritative confirmation of payment. */
+export async function stripeWebhook(req, res) {
+  if (!stripe.stripeReady()) return res.status(503).end();
+  let event;
+  try {
+    if (stripe.WEBHOOK_SECRET) {
+      event = stripe.getStripe().webhooks.constructEvent(req.body, req.headers['stripe-signature'], stripe.WEBHOOK_SECRET);
+    } else {
+      // Dev fallback with no signing secret configured. Never rely on this in prod.
+      event = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body);
+    }
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const orderId = session.metadata && session.metadata.orderId;
+    if (orderId) {
+      const pi = session.payment_intent;
+      if (pi) {
+        await prisma.order.update({ where: { id: orderId }, data: { stripePaymentIntentId: typeof pi === 'string' ? pi : pi.id } }).catch(() => {});
+      }
+      await finalizeOrder(orderId).catch((e) => console.error('[stripe] webhook finalize failed:', e.message));
+    }
+  }
+  res.json({ received: true });
+}
 
 export default router;

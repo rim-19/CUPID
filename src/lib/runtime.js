@@ -677,21 +677,21 @@ var App = {
     _checkout: function () {
       if (Store.cartCount() === 0) return;
       var self = this;
-      var pending = Store.clearCart();
-      var body = this._drawer && this._drawer.querySelector('[data-drawer-body]');
-      if (body) body.innerHTML = this._emptyState('Order placed.', 'A confirmation is on its way. Enjoy the read (and the coffee).');
-      var foot = this._drawer && this._drawer.querySelector('[data-drawer-foot]');
-      if (foot) foot.style.display = 'none';
-      this.announce('Order placed. Thank you.');
-      // If the order included a gifted ebook, surface the download link(s).
-      if (pending && typeof pending.then === 'function') {
-        pending.then(function (r) {
-          if (r && r.downloads && r.downloads.length && body) {
-            body.innerHTML = self._downloadsState(r.downloads);
-            self.announce('Your free digital copy is ready to download.');
-          }
-        });
-      }
+      Store.checkout().then(function (r) {
+        if (!r) return;
+        // Stripe configured: hand off to the hosted checkout page.
+        if (r.url) { window.location.href = r.url; return; }
+        // Instant path (no Stripe): the order is placed and the cart cleared.
+        var body = self._drawer && self._drawer.querySelector('[data-drawer-body]');
+        var foot = self._drawer && self._drawer.querySelector('[data-drawer-foot]');
+        if (foot) foot.style.display = 'none';
+        if (body) {
+          body.innerHTML = (r.downloads && r.downloads.length)
+            ? self._downloadsState(r.downloads)
+            : self._emptyState('Order placed.', 'A confirmation is on its way. Enjoy the read (and the coffee).');
+        }
+        self.announce('Order placed. Thank you.');
+      });
     },
     _downloadsState: function (downloads) {
       var self = this;

@@ -155,20 +155,22 @@ function createServerStore() {
       const seq = (cartSeq += 1);
       api.del('/cart/' + encodeURIComponent(title)).then(applyCart(seq)).catch(() => {});
     },
-    /* The only caller is checkout: place the order and clear server-side.
-       Resolves with any gifted-ebook download links so the UI can offer them. */
-    async clearCart(): Promise<{ downloads: Array<{ title: string; url: string }> }> {
-      cancelAllQty();
-      local.clearCart();
-      cartSeq += 1; // discard any cart reply still in flight
+    /* Start checkout. Returns a Stripe hosted-checkout URL to redirect to when
+       payments are configured (the cart is kept until payment is confirmed), or
+       an instant { order, downloads } result when Stripe is off (dev). The local
+       cart is only cleared on the instant path; the Stripe path clears it after
+       /checkout/confirm succeeds. */
+    async checkout(): Promise<{ url?: string; order?: unknown; downloads?: Array<{ title: string; url: string }> }> {
       try {
         const r = await api.post('/cart/checkout');
-        return { downloads: (r && r.downloads) || [] };
+        if (r && r.url) return { url: r.url };
+        cancelAllQty();
+        local.clearCart();
+        cartSeq += 1;
+        return { order: r && r.order, downloads: (r && r.downloads) || [] };
       } catch (e) {
         toast.error(errMsg(e, 'Checkout could not be completed.'));
-        const s = (cartSeq += 1);
-        api.get('/cart').then(applyCart(s)).catch(() => {}); // restore the cart the server kept
-        return { downloads: [] };
+        return {};
       }
     },
     toggleWish(title: string): boolean {

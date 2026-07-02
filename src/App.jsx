@@ -5,6 +5,7 @@ import { initApp, destroyApp } from './lib/runtime.js';
 import { api } from './lib/api.js';
 import { account } from './lib/account';
 import { store } from './lib/store';
+import { toast } from './lib/toast';
 import { library } from './lib/library';
 import { rsvp } from './lib/rsvp';
 import Block from './components/Block.jsx';
@@ -73,6 +74,7 @@ export default function App() {
   const rootRef = useRef(null);
   const [route, setRoute] = useState(CLOSED);
   const [emailLink, setEmailLink] = useState(null); // {mode:'verify'|'reset', token} from an email link
+  const [checkoutDownloads, setCheckoutDownloads] = useState(null); // gift links shown after a Stripe return
 
   // Email links land on real paths (/verify, /reset). Detect once after mount.
   useEffect(() => {
@@ -88,6 +90,33 @@ export default function App() {
     const path = window.location.pathname;
     if (path === '/verify' || path === '/reset') history.replaceState(null, '', '/');
   };
+
+  // Returning from Stripe hosted checkout: confirm the order, then clear the
+  // ?checkout params from the URL. Runs once after mount.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const co = params.get('checkout');
+    if (!co) return;
+    const clean = () => history.replaceState(null, '', window.location.pathname);
+    if (co === 'cancel') { toast.info('Checkout canceled - your bag is still here.'); clean(); return; }
+    if (co !== 'success') return;
+    const sid = params.get('session_id') || '';
+    (async () => {
+      try {
+        const r = await api.get('/checkout/confirm?session_id=' + encodeURIComponent(sid));
+        if (r && r.paid) {
+          toast.success('Payment received. Thank you for your order!');
+          store.hydrate([], undefined); // cart was cleared server-side
+          if (r.downloads && r.downloads.length) setCheckoutDownloads(r.downloads);
+        } else {
+          toast.info('Your payment is processing. Your order will appear shortly.');
+        }
+      } catch {
+        toast.error('We could not confirm your order. Please check your account in a moment.');
+      }
+      clean();
+    })();
+  }, []);
 
   useEffect(() => {
     // Wire up theme, scroll effects, particles, reveals, counters, the quiz,
@@ -181,6 +210,22 @@ export default function App() {
       <EventModal open={route.view === 'event'} id={route.id} onClose={closeOverlay} />
       <StoryPage open={route.view === 'story'} onClose={closeOverlay} />
       {emailLink ? <VerifyResetView mode={emailLink.mode} token={emailLink.token} onClose={closeEmailLink} /> : null}
+      {checkoutDownloads ? (
+        <div
+          role="dialog" aria-modal="true" aria-label="Order confirmed"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setCheckoutDownloads(null); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9500, background: 'rgba(0,0,0,.62)', display: 'grid', placeItems: 'center', padding: '22px' }}
+        >
+          <div style={{ width: 'min(440px,100%)', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '20px', padding: '26px 24px', textAlign: 'center', boxShadow: '0 40px 120px rgba(0,0,0,.6)' }}>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 700, color: 'var(--accent)', marginBottom: '6px' }}>Thank you!</div>
+            <p style={{ color: 'var(--ink-soft)', fontSize: '14px', lineHeight: 1.6, margin: '0 0 18px' }}>Your order is confirmed. Your free digital copy is ready to download.</p>
+            {checkoutDownloads.map((d, i) => (
+              <a key={i} href={d.url} target="_blank" rel="noopener" style={{ display: 'block', margin: '8px 0', padding: '12px 18px', borderRadius: '99px', background: 'var(--accent)', color: 'var(--accent-ink)', fontWeight: 700, textDecoration: 'none' }}>Download &ldquo;{d.title}&rdquo;</a>
+            ))}
+            <button type="button" onClick={() => setCheckoutDownloads(null)} style={{ marginTop: '12px', background: 'transparent', border: '1px solid var(--line)', color: 'var(--ink-soft)', borderRadius: '99px', padding: '10px 18px', cursor: 'pointer' }}>Close</button>
+          </div>
+        </div>
+      ) : null}
       <Toaster />
     </div>
   );

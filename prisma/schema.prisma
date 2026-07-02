@@ -273,6 +273,7 @@ model Order {
   shippingCents         Int         @default(0)
   totalCents            Int
   currency              String      @default("usd")
+  stripeSessionId       String?     @unique
   stripePaymentIntentId String?     @unique
   shippingAddressId     String?
   billingAddressId      String?
