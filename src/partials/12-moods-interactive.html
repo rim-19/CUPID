@@ -1,0 +1,56 @@
+  <section id="moods" style="position:relative;z-index:2;padding:96px 28px;text-align:center">
+    <div data-margin style="position:absolute;top:118px;right:max(28px,calc(50% - 600px));z-index:3;transform:rotate(7deg);color:var(--accent);text-align:left;width:180px">
+      <div style="font-family:var(--hand);font-size:23px;line-height:1.1;color:var(--accent)">trust the shelf, it knows</div>
+      <div style="margin-top:-2px;margin-left:24px;color:var(--ink-mute)"><svg viewBox="0 0 60 40" width="56" height="38" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block"><path d="M4 6 C20 8 34 16 50 32"/><path d="M50 32 l-11 -1 M50 32 l-2 -11"/></svg></div>
+    </div>
+    <div style="max-width:1100px;margin:0 auto">
+      <h2 data-reveal style="font-family:var(--serif);font-weight:700;font-size:clamp(32px,5vw,58px);line-height:1.02;letter-spacing:-0.02em;margin:0 0 14px">What are you in the<br>mood for tonight?</h2>
+      <p data-reveal data-reveal-delay="100" style="color:var(--ink-soft);font-size:18px;margin:0 auto 36px;max-width:520px">Tap a feeling. The shelf below rearranges itself to match.</p>
+      <div data-reveal data-reveal-delay="160" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-bottom:44px">
+          <button data-mood="0" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M4.8 9h9.4v4.6a4.7 4.7 0 0 1-4.7 4.7A4.7 4.7 0 0 1 4.8 13.6z"/><path d="M14.2 9.9h1.7a2.05 2.05 0 0 1 0 4.1h-1.7"/><path d="M3.4 20.6h12.2"/><path d="M7.6 3.2c-.8 1 .8 2 0 3M11 3.2c-.8 1 .8 2 0 3" opacity=".75"/></svg></span>Cozy</button>
+          <button data-mood="1" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M13.2 3.4 5.6 13.1H11l-1 7.5 7.9-10.2H12z"/></svg></span>Heart-racing</button>
+          <button data-mood="2" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M3.8 8.3c2-1.5 4.2-1.5 6.2 0s4.2 1.5 6.2 0M4.8 12.7c2-1.5 4.2-1.5 6.2 0s4.2 1.5 6.2 0M3.8 17.1c2-1.5 4.2-1.5 6.2 0s4.2 1.5 6.2 0"/></svg></span>Thoughtful</button>
+          <button data-mood="3" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M12 3.4l1.55 4.95a3 3 0 0 0 1.95 1.95L20.6 12l-5.15 1.55a3 3 0 0 0-1.95 1.95L12 20.6l-1.55-5.15a3 3 0 0 0-1.95-1.95L3.4 12l5.15-1.55a3 3 0 0 0 1.95-1.95z"/><path d="M19 4v3M20.5 5.5h-3" opacity=".7"/></svg></span>Whimsical</button>
+          <button data-mood="4" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M20.2 14.4A8.2 8.2 0 1 1 9.6 3.8a6.4 6.4 0 0 0 10.6 10.6z"/></svg></span>Melancholy</button>
+          <button data-mood="5" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);font-weight:600;font-size:15px;cursor:pointer;transition:.25s var(--ease);font-family:var(--sans)"><span data-mood-ic style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block;overflow:visible"><path d="M12 19.6l-1.25-1.13C6.4 14.5 3.6 12 3.6 8.95 3.6 6.5 5.55 4.6 8 4.6c1.38 0 2.7.64 3.57 1.66l.43.5.43-.5A4.7 4.7 0 0 1 16 4.6c2.45 0 4.4 1.9 4.4 4.35 0 3.05-2.8 5.55-7.15 9.52z"/></svg></span>Hopeful</button>
+      </div>
+      <div data-mood-result style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;transition:opacity .4s ease,transform .4s ease;text-align:left">
+          <div data-tilt style="cursor:pointer">
+            <div data-mcover style="aspect-ratio:2/3;border-radius:11px;background:linear-gradient(160deg,#5a3a28,#2e1d13);box-shadow:0 18px 40px rgba(0,0,0,.4);display:flex;align-items:flex-end;padding:18px;position:relative;overflow:hidden;transition:transform .3s">
+              <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.1),transparent 40%,rgba(0,0,0,.35))"></div>
+              <div style="position:relative;z-index:2">
+                <div data-mtitle style="font-family:var(--serif);font-size:19px;font-weight:700;color:#fff;line-height:1.1">The Lantern Orchard</div>
+                <div data-mauthor style="font-size:12.5px;color:rgba(255,255,255,.78);margin-top:4px">M. Ashgrove</div>
+              </div>
+            </div>
+          </div>
+          <div data-tilt style="cursor:pointer">
+            <div data-mcover style="aspect-ratio:2/3;border-radius:11px;background:linear-gradient(160deg,#5a4a30,#2e2618);box-shadow:0 18px 40px rgba(0,0,0,.4);display:flex;align-items:flex-end;padding:18px;position:relative;overflow:hidden;transition:transform .3s">
+              <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.1),transparent 40%,rgba(0,0,0,.35))"></div>
+              <div style="position:relative;z-index:2">
+                <div data-mtitle style="font-family:var(--serif);font-size:19px;font-weight:700;color:#fff;line-height:1.1">Tea for the Wandering</div>
+                <div data-mauthor style="font-size:12.5px;color:rgba(255,255,255,.78);margin-top:4px">R. Pellow</div>
+              </div>
+            </div>
+          </div>
+          <div data-tilt style="cursor:pointer">
+            <div data-mcover style="aspect-ratio:2/3;border-radius:11px;background:linear-gradient(160deg,#7a4332,#3a201a);box-shadow:0 18px 40px rgba(0,0,0,.4);display:flex;align-items:flex-end;padding:18px;position:relative;overflow:hidden;transition:transform .3s">
+              <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.1),transparent 40%,rgba(0,0,0,.35))"></div>
+              <div style="position:relative;z-index:2">
+                <div data-mtitle style="font-family:var(--serif);font-size:19px;font-weight:700;color:#fff;line-height:1.1">A Year of Small Rains</div>
+                <div data-mauthor style="font-size:12.5px;color:rgba(255,255,255,.78);margin-top:4px">I. Voss</div>
+              </div>
+            </div>
+          </div>
+          <div data-tilt style="cursor:pointer">
+            <div data-mcover style="aspect-ratio:2/3;border-radius:11px;background:linear-gradient(160deg,#4a3526,#251a12);box-shadow:0 18px 40px rgba(0,0,0,.4);display:flex;align-items:flex-end;padding:18px;position:relative;overflow:hidden;transition:transform .3s">
+              <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.1),transparent 40%,rgba(0,0,0,.35))"></div>
+              <div style="position:relative;z-index:2">
+                <div data-mtitle style="font-family:var(--serif);font-size:19px;font-weight:700;color:#fff;line-height:1.1">Sugar & Smoke</div>
+                <div data-mauthor style="font-size:12.5px;color:rgba(255,255,255,.78);margin-top:4px">D. Fenwick</div>
+              </div>
+            </div>
+          </div>
+      </div>
+    </div>
+  </section>

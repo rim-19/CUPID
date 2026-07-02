@@ -1,0 +1,13 @@
+{
+  "name": "Cupid — Coffee House & Bookshop",
+  "short_name": "Cupid",
+  "description": "A cozy coffee house and bookshop where stories and hearts steep together.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a120b",
+  "theme_color": "#1a120b",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+*.local
+.DS_Store
+npm-debug.log*
+
+# secrets & local data
+.env
+.env.*
+!.env.example
+data/
+*.bak
+*.corrupt-*

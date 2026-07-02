@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cupid · Coffee House &amp; Bookshop</title>
+    <meta
+      name="description"
+      content="Cupid is a cozy coffee house and bookshop where stories and hearts steep together. Get matched by mood, fall for a blind date with a book, and pull up a chair."
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#1a120b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f3e7d7" media="(prefers-color-scheme: light)" />
+    <link rel="canonical" href="https://cupid.example.com/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cupid" />
+    <meta property="og:title" content="Cupid · Coffee House &amp; Bookshop" />
+    <meta
+      property="og:description"
+      content="A cozy coffee house and bookshop where stories and hearts steep together. Get matched by mood and fall for a blind date with a book."
+    />
+    <meta property="og:url" content="https://cupid.example.com/" />
+    <meta property="og:image" content="https://cupid.example.com/og.svg" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cupid · Coffee House &amp; Bookshop" />
+    <meta
+      name="twitter:description"
+      content="A cozy coffee house and bookshop where stories and hearts steep together."
+    />
+    <meta name="twitter:image" content="https://cupid.example.com/og.svg" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "CafeOrCoffeeShop",
+        "name": "Cupid",
+        "description": "A cozy coffee house and bookshop where stories and hearts steep together.",
+        "servesCuisine": ["Coffee", "Pastries"],
+        "priceRange": "$$",
+        "foundingDate": "2012",
+        "url": "https://cupid.example.com/",
+        "image": "https://cupid.example.com/og.svg",
+        "openingHours": "Mo-Su 08:00-21:00"
+      }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts loaded non-render-blocking: the page paints immediately with the
+         fallback stack, then swaps in the web fonts when ready. -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap"
+      />
+    </noscript>
+  </head>
+  <body>
+    <a class="skip-link" href="#top">Skip to content</a>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

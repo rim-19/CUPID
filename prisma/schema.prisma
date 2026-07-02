@@ -1,0 +1,431 @@
+// Prisma schema for Cupid — Postgres.
+// DRAFT for validation: adjust models freely, then run `npm run db:migrate`.
+// Money is stored as integer minor units (cents) + a currency code, never as
+// display strings. Guest-owned rows carry a nullable sessionId that merges into
+// a userId on sign-in.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Runtime/pooled connection. On Supabase use the Supavisor pooler
+  // (port 6543) with ?pgbouncer=true for serverless. Locally this is just
+  // the direct connection.
+  url       = env("DATABASE_URL")
+  // Direct connection used by `prisma migrate` / introspection. On Supabase
+  // this is the port 5432 direct URL; locally it can mirror DATABASE_URL.
+  directUrl = env("DIRECT_URL")
+}
+
+// ----------------------------- enums -----------------------------
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum TokenType {
+  VERIFY
+  RESET
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  SHIPPED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum Roast {
+  LIGHT
+  MED
+  DARK
+}
+
+enum Pace {
+  SLOW
+  MEDIUM
+  FAST
+}
+
+enum Ending {
+  HOPEFUL
+  BITTERSWEET
+  OPEN
+}
+
+enum DigitalFormat {
+  PDF
+  EPUB
+  MOBI
+}
+
+// ------------------------- identity & auth ------------------------
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  role          Role     @default(CUSTOMER)
+  failedLoginCount Int   @default(0) // consecutive failed logins, for lockout
+  lockedUntil   DateTime? // set when too many failures; login refused until then
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions  Session[]
+  cart      Cart?
+  wishlist  WishlistItem[]
+  rsvps     Rsvp[]
+  orders         Order[]
+  addresses      Address[]
+  reviews        Review[]
+  downloadGrants DownloadGrant[]
+  tokens         VerificationToken[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  csrf      String
+  userId    String? // null = anonymous guest session; admin is derived from User.role
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user     User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cart     Cart?
+  wishlist WishlistItem[]
+  rsvps    Rsvp[]
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model VerificationToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  type      TokenType
+  userId    String
+  email     String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ----------------------------- catalog ----------------------------
+model Book {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  author      String
+  summary     String   @default("")
+  notes       String   @default("")
+  genre       String   @default("Fiction")
+  language    String   @default("")
+  priceCents  Int      @default(0)
+  currency    String   @default("usd")
+  coverTint   String   @default("")
+  roast       Roast    @default(MED)
+  pace        Pace     @default(MEDIUM)
+  ending      Ending   @default(OPEN)
+  mood        String[] @default([])
+  pages       Int      @default(0)
+  year        Int      @default(0)
+  ratingAvg   Decimal  @default(0) @db.Decimal(2, 1)
+  reviewCount Int      @default(0)
+  stock       Int      @default(0)
+  active      Boolean  @default(true)
+  custom      Boolean  @default(false)
+  digitalGift Boolean  @default(false) // buying grants a free downloadable copy
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cartItems      CartItem[]
+  wishlist       WishlistItem[]
+  orderItems     OrderItem[]
+  reviews        Review[]
+  assets         BookAsset[]
+  downloadGrants DownloadGrant[]
+
+  @@index([genre])
+}
+
+model Review {
+  id               String   @id @default(cuid())
+  bookId           String
+  userId           String
+  rating           Int // 1..5, enforced in app logic
+  body             String   @default("")
+  verifiedPurchase Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, userId])
+  @@index([bookId])
+}
+
+// -------------------- digital downloads (ebook gift) --------------------
+// The file itself lives in object storage (S3 / R2 / Vercel Blob); the DB
+// only keeps a pointer (storageKey) and metadata. A BookAsset is the file
+// per format; a DownloadGrant is one buyer's time-limited right to fetch it.
+model BookAsset {
+  id            String        @id @default(cuid())
+  bookId        String
+  format        DigitalFormat
+  storageKey    String // object-storage key/path, NOT a public URL
+  fileName      String
+  contentType   String        @default("application/octet-stream")
+  fileSizeBytes Int           @default(0)
+  checksum      String? // sha256 for integrity verification
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, format])
+}
+
+model DownloadGrant {
+  id               String    @id @default(cuid())
+  orderId          String
+  userId           String? // null for guest checkout (access via emailed signed link)
+  bookId           String
+  tokenHash        String    @unique // hash of the secret in the download link
+  downloadCount    Int       @default(0)
+  maxDownloads     Int       @default(5) // 0 or null via app logic = unlimited
+  expiresAt        DateTime? // null = never expires
+  createdAt        DateTime  @default(now())
+  lastDownloadedAt DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  book  Book  @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, bookId]) // one grant per book per order
+  @@index([userId])
+}
+
+// --------------------------- shopping -----------------------------
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  sessionId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items   CartItem[]
+}
+
+model CartItem {
+  id     String @id @default(cuid())
+  cartId String
+  bookId String
+  qty    Int    @default(1)
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, bookId])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String?
+  sessionId String?
+  bookId    String
+  createdAt DateTime @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  book    Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@unique([sessionId, bookId])
+  @@index([bookId])
+}
+
+// ------------------------ commerce / orders -----------------------
+model Order {
+  id                    String      @id @default(cuid())
+  userId                String?
+  email                 String
+  status                OrderStatus @default(PENDING)
+  subtotalCents         Int
+  taxCents              Int         @default(0)
+  shippingCents         Int         @default(0)
+  totalCents            Int
+  currency              String      @default("usd")
+  stripePaymentIntentId String?     @unique
+  shippingAddressId     String?
+  billingAddressId      String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shippingAddress Address?    @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddress  Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  items           OrderItem[]
+  payment         Payment?
+  downloadGrants  DownloadGrant[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  bookId         String?
+  titleSnapshot  String
+  unitPriceCents Int
+  qty            Int
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  book  Book? @relation(fields: [bookId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  orderId               String        @unique
+  stripePaymentIntentId String        @unique
+  stripeChargeId        String?
+  amountCents           Int
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String?
+  name       String
+  line1      String
+  line2      String?
+  city       String
+  region     String?
+  postalCode String
+  country    String
+  phone      String?
+  createdAt  DateTime @default(now())
+
+  user           User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shippingOrders Order[] @relation("ShippingAddress")
+  billingOrders  Order[] @relation("BillingAddress")
+
+  @@index([userId])
+}
+
+// ----------------------------- content ----------------------------
+model Event {
+  id        String   @id @default(cuid())
+  month     String
+  day       String
+  icon      String   @default("cup")
+  type      String   @default("")
+  title     String
+  time      String   @default("")
+  place     String   @default("")
+  spots     String   @default("")
+  desc      String[] @default([])
+  createdAt DateTime @default(now())
+
+  rsvps Rsvp[]
+}
+
+model Rsvp {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@unique([sessionId, eventId])
+  @@index([eventId])
+}
+
+model Article {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  cat       String   @default("Staff picks")
+  date      String   @default("")
+  readTime  String   @default("3 min read")
+  icon      String   @default("cup")
+  tint      String   @default("")
+  title     String
+  excerpt   String   @default("")
+  body      String[] @default([])
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// -------------------------- marketing / ops -----------------------
+model NewsletterSubscriber {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  confirmed   Boolean   @default(false)
+  tokenHash   String
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model OutboxEmail {
+  id      String   @id @default(cuid())
+  to      String
+  from    String
+  subject String
+  text    String   @default("")
+  html    String   @default("")
+  status  String   @default("logged")
+  sentAt  DateTime @default(now())
+}
+
+// Append-only record of privileged (admin) actions, for accountability.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String? // the admin who acted (null if the account was later deleted)
+  actorEmail String // snapshot of who acted, kept even if the user is removed
+  action     String // e.g. "book.create", "book.delete", "asset.upload"
+  target     String? // id of the affected entity
+  detail     String? // short human-readable summary
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
