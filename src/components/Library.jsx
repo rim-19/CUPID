@@ -4,7 +4,6 @@ import { icon, Svg } from '../lib/icons.jsx';
 import { library } from '../lib/library';
 import { store } from '../lib/store';
 import { api } from '../lib/api.js';
-import AdminPanel from './AdminPanel.jsx';
 
 const SORTS = [
   { v: 'newest', label: 'Newest' },
@@ -58,18 +57,16 @@ function BookCard({ b }) {
   );
 }
 
-export default function Library({ open, genre, adminOpen, onClose }) {
+export default function Library({ open, genre, onClose }) {
   const [activeGenre, setActiveGenre] = useState(genre || 'All');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ books: [], total: 0, loading: true });
-  const [admin, setAdmin] = useState(Boolean(adminOpen));
   const [, force] = useState(0);
 
   useEffect(() => library.subscribe(() => force((n) => n + 1)), []);
   useEffect(() => { if (open) setActiveGenre(genre || 'All'); }, [genre, open]);
-  useEffect(() => { if (open) setAdmin(Boolean(adminOpen)); }, [adminOpen, open]);
   // Any filter change resets to the first page.
   useEffect(() => { setPage(1); }, [query, activeGenre, sort]);
 
@@ -96,17 +93,13 @@ export default function Library({ open, genre, adminOpen, onClose }) {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e) => {
-      if (e.key !== 'Escape') return;
-      if (admin) setAdmin(false);
-      else onClose();
-    };
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, admin, onClose]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -131,9 +124,9 @@ export default function Library({ open, genre, adminOpen, onClose }) {
               <div style={css('font-family:var(--mono);font-size:12px;color:var(--ink-mute);letter-spacing:.04em')}>{data.total} {data.total === 1 ? 'title' : 'titles'}</div>
             </div>
             <div style={css('display:flex;align-items:center;gap:10px')}>
-              <button type="button" onClick={() => setAdmin(true)} style={css('display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);font:600 13px/1 var(--sans);cursor:pointer;transition:.2s')}>
+              <a href="#admin" style={css('display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);font:600 13px/1 var(--sans);cursor:pointer;transition:.2s;text-decoration:none')}>
                 <Svg as="span" style={{ display: 'inline-grid', color: 'var(--accent)' }} html={icon('lock', 15, 1.8)} /> Admin
-              </button>
+              </a>
               <button type="button" aria-label="Close library" onClick={onClose} style={css('display:grid;place-items:center;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;transition:.2s')}>
                 <Svg as="span" style={{ display: 'inline-grid' }} html={icon('close', 18, 2)} />
               </button>
@@ -185,8 +178,6 @@ export default function Library({ open, genre, adminOpen, onClose }) {
           </div>
         )}
       </div>
-
-      <AdminPanel open={admin} onClose={() => setAdmin(false)} />
     </div>
   );
 }

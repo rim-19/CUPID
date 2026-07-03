@@ -418,6 +418,14 @@ model OutboxEmail {
   sentAt  DateTime @default(now())
 }
 
+// Editable site chrome (brand name, banner, theme accent, contact, …). A simple
+// key/value store; the app reads it on boot and the admin dashboard writes it.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 // Append-only record of privileged (admin) actions, for accountability.
 model AuditLog {
   id         String   @id @default(cuid())

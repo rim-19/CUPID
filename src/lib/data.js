@@ -2,14 +2,14 @@
    (The remaining bespoke sections render their proven markup as partials.) */
 
 export const categories = [
-  { name: 'Fiction',       ic: 'book',    count: 2140, tint: 'rgba(232,133,154,.16)' },
-  { name: 'Romance',       ic: 'rose',    count: 980,  tint: 'rgba(232,133,154,.24)' },
-  { name: 'Fantasy',       ic: 'sparkle', count: 1320, tint: 'rgba(214,160,106,.18)' },
-  { name: 'Mystery',       ic: 'search',  count: 760,  tint: 'rgba(200,115,86,.18)' },
-  { name: 'Poetry',        ic: 'heart',   count: 410,  tint: 'rgba(232,133,154,.18)' },
-  { name: 'Nonfiction',    ic: 'compass', count: 1540, tint: 'rgba(214,160,106,.16)' },
-  { name: "Children's",    ic: 'balloon', count: 890,  tint: 'rgba(232,133,154,.2)' },
-  { name: 'Food & Coffee', ic: 'cup',     count: 320,  tint: 'rgba(200,115,86,.18)' },
+  { name: 'Fiction',       ic: 'book',    count: 2140, tint: 'rgba(200,169,122,.18)' },
+  { name: 'Romance',       ic: 'rose',    count: 980,  tint: 'rgba(192,125,84,.18)' },
+  { name: 'Fantasy',       ic: 'sparkle', count: 1320, tint: 'rgba(207,159,104,.18)' },
+  { name: 'Mystery',       ic: 'search',  count: 760,  tint: 'rgba(192,125,84,.16)' },
+  { name: 'Poetry',        ic: 'heart',   count: 410,  tint: 'rgba(200,169,122,.16)' },
+  { name: 'Nonfiction',    ic: 'compass', count: 1540, tint: 'rgba(207,159,104,.16)' },
+  { name: "Children's",    ic: 'balloon', count: 890,  tint: 'rgba(200,169,122,.2)' },
+  { name: 'Food & Coffee', ic: 'cup',     count: 320,  tint: 'rgba(192,125,84,.18)' },
 ];
 
 export const arrivals = [

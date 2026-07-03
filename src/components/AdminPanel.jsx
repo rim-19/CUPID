@@ -4,6 +4,7 @@ import { icon, Svg } from '../lib/icons.jsx';
 import { library, coverFromColor } from '../lib/library';
 import { api } from '../lib/api.js';
 import { account } from '../lib/account';
+import { site } from '../lib/site';
 import { toast } from '../lib/toast';
 
 /* Admin gate. Admin is a role on the signed-in account (User.role === 'ADMIN'),
@@ -55,6 +56,7 @@ export default function AdminPanel({ open, onClose }) {
   const [messages, setMessages] = useState(null);
   const [subs, setSubs] = useState(null);
   const [auditRows, setAuditRows] = useState(null);
+  const [siteForm, setSiteForm] = useState(null);
   const [newEvent, setNewEvent] = useState(EVENT_BLANK);
   const [newArticle, setNewArticle] = useState(ARTICLE_BLANK);
 
@@ -86,12 +88,16 @@ export default function AdminPanel({ open, onClose }) {
     }
   }, [open, signedIn, tab, books, events, articles, orders]);
 
+  useEffect(() => {
+    if (open && signedIn && tab === 'settings' && siteForm === null) setSiteForm({ ...site.get() });
+  }, [open, signedIn, tab, siteForm]);
+
   if (!open) return null;
   const currentUser = account.current();
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const signOut = () => {
-    setBooks(null); setEvents(null); setArticles(null); setOrders(null); setMessages(null); setSubs(null); setAuditRows(null);
+    setBooks(null); setEvents(null); setArticles(null); setOrders(null); setMessages(null); setSubs(null); setAuditRows(null); setSiteForm(null);
     account.signOut();
   };
 
@@ -101,6 +107,19 @@ export default function AdminPanel({ open, onClose }) {
       const r = await api.patch('/admin/orders/' + o.id, { status });
       setOrders((list) => (list || []).map((x) => (x.id === o.id ? r.order : x)));
     } catch (err) { toast.error(errMsg(err, 'Could not update the order.')); }
+    setBusy('');
+  };
+
+  const setSite = (k) => (e) => setSiteForm((f) => ({ ...f, [k]: e.target.value }));
+  const saveSettings = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy('settings');
+    try {
+      const saved = await site.save(siteForm);
+      setSiteForm({ ...saved });
+      toast.success('Site settings saved.');
+    } catch (err) { toast.error(errMsg(err, 'Could not save settings.')); }
     setBusy('');
   };
 
@@ -221,8 +240,10 @@ export default function AdminPanel({ open, onClose }) {
   const eset = (k) => (e) => setNewEvent((f) => ({ ...f, [k]: e.target.value }));
   const aset = (k) => (e) => setNewArticle((f) => ({ ...f, [k]: e.target.value }));
 
-  const tabBtn = (id, text) => (
-    <button type="button" onClick={() => setTab(id)} style={css('border:none;border-radius:99px;padding:8px 14px;font:700 12.5px/1 var(--sans);cursor:pointer;white-space:nowrap;transition:.2s;' + (tab === id ? 'background:var(--accent);color:var(--accent-ink)' : 'background:transparent;color:var(--ink-soft)'))}>{text}</button>
+  const navItem = (id, label, ic) => (
+    <button type="button" onClick={() => setTab(id)} className={'admin-navitem' + (tab === id ? ' is-on' : '')}>
+      <Svg as="span" style={{ display: 'inline-grid' }} html={icon(ic, 16, 1.7)} /> {label}
+    </button>
   );
 
   const loading = (label) => <div style={css('text-align:center;color:var(--ink-mute);font-family:var(--mono);font-size:12.5px;padding:26px 0')}>{label}</div>;
@@ -231,47 +252,44 @@ export default function AdminPanel({ open, onClose }) {
   const cover = coverFromColor(form.color);
 
   return (
-    <div
-      role="dialog" aria-modal="true" aria-label="Admin"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={css('position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.62);display:grid;place-items:center;padding:22px;overflow:auto')}
-    >
-      <div style={css('width:min(660px,100%);background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:0 40px 120px rgba(0,0,0,.6);overflow:hidden;animation:adminIn .3s var(--ease)')}>
-        <div style={css('display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line-soft)')}>
-          <div style={css('display:flex;align-items:center;gap:10px')}>
-            <Svg as="span" style={{ display: 'inline-grid', color: 'var(--accent)' }} html={icon('lock', 18, 1.8)} />
-            <div style={css('font-family:var(--serif);font-size:19px;font-weight:700')}>{signedIn ? 'Manage Cupid' : 'Admin access'}</div>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} style={css('display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer')}>
-            <Svg as="span" style={{ display: 'inline-grid' }} html={icon('close', 16, 2)} />
-          </button>
-        </div>
-
-        {!signedIn ? (
-          <div style={css('padding:24px 22px 26px')}>
-            <p style={css('color:var(--ink-soft);font-size:14px;line-height:1.6;margin:0 0 16px')}>
+    <div className="admin-shell" role="dialog" aria-modal="true" aria-label="Admin dashboard">
+      {!signedIn ? (
+        <div style={css('flex:1;display:grid;place-items:center;padding:24px')}>
+          <div style={css('max-width:420px;text-align:center')}>
+            <Svg as="span" style={{ display: 'inline-grid', color: 'var(--accent)', marginBottom: '10px' }} html={icon('lock', 26, 1.7)} />
+            <div style={css('font-family:var(--serif);font-size:23px;font-weight:700;margin-bottom:8px')}>Admin access</div>
+            <p style={css('color:var(--ink-soft);font-size:14px;line-height:1.6;margin:0 0 18px')}>
               {currentUser
                 ? `You are signed in as ${currentUser.email}, but this account does not have admin access.`
                 : 'Managing the shop requires an admin account. Please sign in with your staff account to continue.'}
             </p>
-            <div style={css('display:flex;gap:10px;margin-top:4px')}>
+            <div style={css('display:flex;gap:10px;justify-content:center')}>
               {currentUser ? null : (
                 <button type="button" ref={firstRef} onClick={() => { window.location.hash = '#signin'; }} style={css(BTN)}>Sign in</button>
               )}
-              <button type="button" onClick={onClose} style={css(BTN + ';' + GHOST)}>Close</button>
+              <button type="button" onClick={onClose} style={css(BTN + ';' + GHOST)}>Back to site</button>
             </div>
           </div>
-        ) : (
-          <div style={css('padding:16px 22px 22px')}>
-            <div style={css('display:flex;gap:6px;background:var(--bg-1);border:1px solid var(--line);border-radius:99px;padding:4px;margin-bottom:18px;overflow-x:auto')}>
-              {tabBtn('books', 'Books')}
-              {tabBtn('events', 'Events')}
-              {tabBtn('articles', 'Articles')}
-              {tabBtn('activity', 'Activity')}
-              <button type="button" onClick={signOut} style={css(BTN + ';' + GHOST + ';margin-left:auto;padding:8px 14px')}>Sign out</button>
+        </div>
+      ) : (
+        <>
+          <aside className="admin-side">
+            <div style={css('display:flex;align-items:center;gap:9px;padding:4px 10px 16px')}>
+              <Svg as="span" style={{ display: 'inline-grid', color: 'var(--accent)' }} html={icon('lock', 18, 1.8)} />
+              <span style={css('font-family:var(--serif);font-size:18px;font-weight:700')}>Dashboard</span>
             </div>
-
-            <div style={css('max-height:min(70vh,640px);overflow:auto;padding-right:2px')}>
+            {navItem('books', 'Catalog', 'book')}
+            {navItem('events', 'Events', 'heart')}
+            {navItem('articles', 'Articles', 'moon')}
+            {navItem('activity', 'Activity', 'compass')}
+            {navItem('settings', 'Site settings', 'cup')}
+            <div style={css('margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:8px')} className="admin-navitem-hide-sm">
+              <button type="button" onClick={signOut} style={css(BTN + ';' + GHOST + ';width:100%')}>Sign out</button>
+              <button type="button" onClick={onClose} style={css(BTN + ';' + GHOST + ';width:100%')}>Back to site</button>
+            </div>
+          </aside>
+          <main className="admin-main">
+            <div style={css('max-width:920px;margin:0 auto;padding:26px 26px 64px')}>
               {tab === 'books' ? (
                 <div>
                   <form onSubmit={submitBook} style={css(ROW + ';padding:16px')}>
@@ -511,10 +529,54 @@ export default function AdminPanel({ open, onClose }) {
                   )}
                 </div>
               ) : null}
+
+              {tab === 'settings' ? (
+                <div>
+                  {!siteForm ? loading('Loading settings...') : (
+                    <form onSubmit={saveSettings}>
+                      <div style={css(ROW + ';padding:18px')}>
+                        <div style={css('font-family:var(--serif);font-size:16px;font-weight:700;margin-bottom:4px')}>Brand &amp; theme</div>
+                        <p style={css('color:var(--ink-soft);font-size:12.5px;margin:0 0 14px')}>These apply across the whole site.</p>
+                        <div style={css('display:grid;gap:14px')}>
+                          <div><label style={css(LABEL)} htmlFor="st-brand">Brand name</label><input id="st-brand" value={siteForm.brandName || ''} onChange={setSite('brandName')} style={css(FIELD)} /></div>
+                          <div style={css('display:flex;align-items:flex-end;gap:12px')}>
+                            <div style={css('flex:1')}><label style={css(LABEL)} htmlFor="st-accent">Accent colour</label><input id="st-accent" value={siteForm.accent || ''} onChange={setSite('accent')} placeholder="#c8a97a (blank = default)" style={css(FIELD)} /></div>
+                            <input type="color" aria-label="Pick accent colour" value={/^#[0-9a-fA-F]{6}$/.test(siteForm.accent || '') ? siteForm.accent : '#c8a97a'} onChange={setSite('accent')} style={css('width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--bg-1);cursor:pointer;flex-shrink:0')} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={css(ROW + ';padding:18px')}>
+                        <div style={css('font-family:var(--serif);font-size:16px;font-weight:700;margin-bottom:12px')}>Announcement banner</div>
+                        <label style={css('display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink-soft);cursor:pointer;margin-bottom:14px')}>
+                          <input type="checkbox" checked={siteForm.bannerEnabled !== 'false'} onChange={(e) => setSiteForm((f) => ({ ...f, bannerEnabled: e.target.checked ? 'true' : 'false' }))} /> Show the banner
+                        </label>
+                        <div style={css('display:grid;gap:14px')}>
+                          <div><label style={css(LABEL)} htmlFor="st-btext">Message</label><input id="st-btext" value={siteForm.bannerText || ''} onChange={setSite('bannerText')} style={css(FIELD)} /></div>
+                          <div style={css('display:grid;grid-template-columns:1fr 1fr;gap:12px')}>
+                            <div><label style={css(LABEL)} htmlFor="st-bcta">Link text</label><input id="st-bcta" value={siteForm.bannerCtaText || ''} onChange={setSite('bannerCtaText')} style={css(FIELD)} /></div>
+                            <div><label style={css(LABEL)} htmlFor="st-blink">Link target</label><input id="st-blink" value={siteForm.bannerLink || ''} onChange={setSite('bannerLink')} style={css(FIELD)} /></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={css(ROW + ';padding:18px')}>
+                        <div style={css('font-family:var(--serif);font-size:16px;font-weight:700;margin-bottom:12px')}>Contact &amp; social</div>
+                        <div style={css('display:grid;grid-template-columns:1fr 1fr;gap:12px')}>
+                          <div><label style={css(LABEL)} htmlFor="st-email">Contact email</label><input id="st-email" value={siteForm.contactEmail || ''} onChange={setSite('contactEmail')} style={css(FIELD)} /></div>
+                          <div><label style={css(LABEL)} htmlFor="st-ig">Instagram URL</label><input id="st-ig" value={siteForm.instagramUrl || ''} onChange={setSite('instagramUrl')} style={css(FIELD)} /></div>
+                        </div>
+                      </div>
+
+                      <button type="submit" disabled={busy === 'settings'} style={css(BTN + (busy === 'settings' ? ';opacity:.6;cursor:default' : ''))}>{busy === 'settings' ? 'Saving...' : 'Save settings'}</button>
+                    </form>
+                  )}
+                </div>
+              ) : null}
             </div>
-          </div>
-        )}
-      </div>
+          </main>
+        </>
+      )}
     </div>
   );
 }

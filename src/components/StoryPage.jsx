@@ -3,9 +3,9 @@ import { css } from '../lib/css.js';
 import { icon, Svg } from '../lib/icons.jsx';
 
 const STORY = [
-  'We started in 2012 with one wobbly espresso machine and a single shelf of paperbacks, in a storefront that had been three failed businesses in a row. The landlord wished us luck in the tone of a man who had wished it before.',
+  'We opened our doors in 2026 with one wobbly espresso machine and a single shelf of paperbacks, in a storefront that had been three failed businesses in a row. The landlord wished us luck in the tone of a man who had wished it before. We intend to be the one that finally sticks.',
   'The first winter was lean. We sold more coffee than books and gave away more advice than either. But people kept coming back for the same reason we had opened the doors: it is a good thing to have somewhere warm to sit with a story and a strong drink, and there were fewer such places than there should have been.',
-  'Fourteen years later the shelves climb the walls, the back room hosts poetry by candlelight, and the espresso machine still hisses like it is in love. Every book here has been read, argued over, and lovingly hand-noted by one of our keepers, usually over a second cup.',
+  'It is only our first year and already the shelves climb the walls, the back room hosts poetry by candlelight, and the espresso machine hisses like it is in love. Every book here has been read, argued over, and lovingly hand-noted by one of our keepers, usually over a second cup. Give us one visit and we will be your favourite bookshop.',
   'We are not the biggest bookshop in the city and we have never tried to be. We are the one where someone remembers what you read last time, hands you the next thing before you ask, and refuses to tell you how it ends.',
 ];
 

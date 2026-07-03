@@ -65,6 +65,29 @@ async function audit(req, action, target, detail) {
   }
 }
 
+/* Editable site chrome. Whitelisted so an admin can only set known keys within
+   length limits; the accent is additionally constrained to a hex colour so it
+   cannot inject arbitrary CSS. */
+const SETTINGS = {
+  brandName: { def: 'Cupid', max: 40 },
+  bannerEnabled: { def: 'true', max: 5 },
+  bannerText: { def: 'Sweetheart Season · all February · candlelit tastings, cocoa & live acoustic', max: 240 },
+  bannerCtaText: { def: 'See the line-up', max: 40 },
+  bannerLink: { def: '#events', max: 200 },
+  contactEmail: { def: 'hello@cupid.local', max: 160 },
+  instagramUrl: { def: 'https://www.instagram.com', max: 200 },
+  accent: { def: '', max: 20 },
+};
+
+async function readSettings() {
+  const rows = await prisma.setting.findMany();
+  const map = {};
+  rows.forEach((r) => { map[r.key] = r.value; });
+  const out = {};
+  for (const k of Object.keys(SETTINGS)) out[k] = map[k] !== undefined ? map[k] : SETTINGS[k].def;
+  return out;
+}
+
 /* Verify against this constant hash when an email is unknown so login timing
    does not reveal whether the account exists. */
 const DUMMY_HASH = (() => {
@@ -446,21 +469,42 @@ router.post('/auth/logout-all', auth.requireAuth, ah(async (req, res) => {
 
 /* One round trip on page load. */
 router.get('/bootstrap', ah(async (req, res) => {
-  const [books, cart, wishItems, rsvpRows] = await Promise.all([
+  const [books, cart, wishItems, rsvpRows, settings] = await Promise.all([
     prisma.book.findMany({ where: { active: true }, orderBy: { createdAt: 'asc' } }),
     getCart(req),
     prisma.wishlistItem.findMany({ where: auth.ownerWhere(req), include: { book: true } }),
     prisma.rsvp.findMany({ where: auth.ownerWhere(req) }),
+    readSettings(),
   ]);
   res.json({
     user: auth.publicUser(req.user),
     admin: Boolean(req.user && req.user.role === 'ADMIN'),
     csrf: req.session.csrf,
+    settings,
     books: books.map(publicBook),
     cart: cartLines(cart),
     wishlist: wishItems.map((w) => w.book.title),
     rsvps: rsvpRows.map((r) => r.eventId),
   });
+}));
+
+/* ============================== SITE SETTINGS ============================== */
+router.get('/settings', ah(async (_req, res) => {
+  res.json({ settings: await readSettings() });
+}));
+
+router.put('/settings', auth.requireAdmin, ah(async (req, res) => {
+  const body = req.body || {};
+  const changed = [];
+  for (const k of Object.keys(SETTINGS)) {
+    if (body[k] === undefined) continue;
+    let v = clamp(body[k], SETTINGS[k].max);
+    if (k === 'accent' && v && !/^#[0-9a-fA-F]{3,8}$/.test(v)) v = ''; // reject non-hex
+    await prisma.setting.upsert({ where: { key: k }, create: { key: k, value: v }, update: { value: v } });
+    changed.push(k);
+  }
+  await audit(req, 'settings.update', null, changed.join(', '));
+  res.json({ settings: await readSettings() });
 }));
 
 /* ============================== ADMIN ============================== */

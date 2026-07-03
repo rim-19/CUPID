@@ -5,6 +5,7 @@ import { initApp, destroyApp } from './lib/runtime.js';
 import { api } from './lib/api.js';
 import { account } from './lib/account';
 import { store } from './lib/store';
+import { site } from './lib/site';
 import { toast } from './lib/toast';
 import { library } from './lib/library';
 import { rsvp } from './lib/rsvp';
@@ -12,6 +13,7 @@ import Block from './components/Block.jsx';
 import Categories from './components/Categories.jsx';
 import Arrivals from './components/Arrivals.jsx';
 import Library from './components/Library.jsx';
+import AdminPanel from './components/AdminPanel.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import AccountModal from './components/AccountModal.jsx';
 import BookModal from './components/BookModal.jsx';
@@ -57,7 +59,7 @@ const CLOSED = { view: null, genre: 'All', admin: false, id: '' };
 
 function parseRoute() {
   const h = (typeof window !== 'undefined' && window.location.hash) || '';
-  if (h === '#admin') return { view: 'library', genre: 'All', admin: true, id: '' };
+  if (h === '#admin') return { view: 'admin', genre: 'All', admin: false, id: '' };
   if (h === '#library') return { view: 'library', genre: 'All', admin: false, id: '' };
   if (h.indexOf('#library/') === 0) return { view: 'library', genre: decodeURIComponent(h.slice(9)), admin: false, id: '' };
   if (h === '#signin') return { view: 'signin', genre: 'All', admin: false, id: '' };
@@ -139,6 +141,7 @@ export default function App() {
       try {
         const data = await api.get('/bootstrap');
         if (!alive) return;
+        if (data.settings) site.hydrate(data.settings);
         account.hydrate(data.user || null);
         store.hydrate(data.cart || [], data.wishlist || []);
         if (Array.isArray(data.books)) library.hydrate(data.books);
@@ -206,7 +209,8 @@ export default function App() {
       <Block html={newsletter} />
       <Block html={footer} />
 
-      <Library open={route.view === 'library'} genre={route.genre} adminOpen={route.admin} onClose={closeOverlay} />
+      <Library open={route.view === 'library'} genre={route.genre} onClose={closeOverlay} />
+      <AdminPanel open={route.view === 'admin'} onClose={closeOverlay} />
       <AuthModal open={route.view === 'signin'} onClose={closeOverlay} />
       <AccountModal open={route.view === 'account'} onClose={closeOverlay} />
       <BookModal open={route.view === 'book'} id={route.id} onClose={closeOverlay} />
