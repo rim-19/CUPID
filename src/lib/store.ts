@@ -34,23 +34,27 @@ export function createStore() {
         listeners.delete(listener);
       };
     },
-    addToCart(title: string, price: string, qty = 1): void {
-      const line = state.cart.find((c) => c.title === title);
+    /* Lines are identified by bookId when known, falling back to title for
+       legacy/decorative paths, so two different books that share a title never
+       collide. */
+    addToCart(bookId: string | null, title: string, price: string, qty = 1): void {
+      const key = bookId || title;
+      const line = state.cart.find((c) => (c.bookId || c.title) === key);
       if (line) {
-        state.cart = state.cart.map((c) => (c.title === title ? { ...c, qty: c.qty + qty } : c));
+        state.cart = state.cart.map((c) => ((c.bookId || c.title) === key ? { ...c, qty: c.qty + qty } : c));
       } else {
-        state.cart = [...state.cart, { title, price, qty }];
+        state.cart = [...state.cart, { bookId: bookId || undefined, title, price, qty }];
       }
       emit();
     },
-    setQty(title: string, qty: number): void {
+    setQty(key: string, qty: number): void {
       state.cart = state.cart
-        .map((c) => (c.title === title ? { ...c, qty } : c))
+        .map((c) => ((c.bookId || c.title) === key ? { ...c, qty } : c))
         .filter((c) => c.qty > 0);
       emit();
     },
-    removeFromCart(title: string): void {
-      state.cart = state.cart.filter((c) => c.title !== title);
+    removeFromCart(key: string): void {
+      state.cart = state.cart.filter((c) => (c.bookId || c.title) !== key);
       emit();
     },
     clearCart(): void {
@@ -129,31 +133,34 @@ function createServerStore() {
       wishSeq += 1;
       local.hydrate(cart, wishlist);
     },
-    addToCart(title: string, price: string, qty = 1): void {
-      cancelQty(title);
-      local.addToCart(title, price, qty);
+    addToCart(bookId: string | null, title: string, price: string, qty = 1): void {
+      const key = bookId || title;
+      cancelQty(key);
+      local.addToCart(bookId, title, price, qty);
       const seq = (cartSeq += 1);
-      api.post('/cart', { title, price, qty }).then(applyCart(seq)).catch((e) => {
+      api.post('/cart', { bookId, title, qty }).then(applyCart(seq)).catch((e) => {
         toast.error(errMsg(e, 'Could not add that to your bag.'));
         const s = (cartSeq += 1);
         api.get('/cart').then(applyCart(s)).catch(() => {}); // roll back the optimistic add
       });
     },
-    setQty(title: string, qty: number): void {
-      local.setQty(title, qty);
-      cancelQty(title);
+    setQty(key: string, qty: number): void {
+      const ln = local.get().cart.find((c) => (c.bookId || c.title) === key);
+      local.setQty(key, qty);
+      cancelQty(key);
       const t = setTimeout(() => {
-        qtyTimers.delete(title);
+        qtyTimers.delete(key);
         const seq = (cartSeq += 1);
-        api.patch('/cart', { title, qty }).then(applyCart(seq)).catch(() => {});
+        api.patch('/cart', { bookId: ln?.bookId, title: ln?.title, qty }).then(applyCart(seq)).catch(() => {});
       }, 250);
-      qtyTimers.set(title, t);
+      qtyTimers.set(key, t);
     },
-    removeFromCart(title: string): void {
-      cancelQty(title);
-      local.removeFromCart(title);
+    removeFromCart(key: string): void {
+      const ln = local.get().cart.find((c) => (c.bookId || c.title) === key);
+      cancelQty(key);
+      local.removeFromCart(key);
       const seq = (cartSeq += 1);
-      api.del('/cart/' + encodeURIComponent(title)).then(applyCart(seq)).catch(() => {});
+      api.del('/cart/' + encodeURIComponent((ln && (ln.bookId || ln.title)) || key)).then(applyCart(seq)).catch(() => {});
     },
     /* Start checkout. Returns a Stripe hosted-checkout URL to redirect to when
        payments are configured (the cart is kept until payment is confirmed), or

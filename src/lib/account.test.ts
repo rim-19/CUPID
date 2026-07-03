@@ -35,26 +35,26 @@ function run(method: string, headerToken: string | undefined, sessionCsrf: strin
    constant-time compare. The full sign up / in / out flow is covered by the
    backend integration checks and the end-to-end tests. */
 describe('server password hashing', () => {
-  it('produces a salted hash that is not the plaintext', () => {
-    const stored = hashPassword('books123');
+  it('produces a salted hash that is not the plaintext', async () => {
+    const stored = await hashPassword('books123');
     expect(stored).toContain(':');
     expect(stored).not.toContain('books123');
   });
 
-  it('uses a fresh salt each time (same password, different hash)', () => {
-    expect(hashPassword('books123')).not.toBe(hashPassword('books123'));
+  it('uses a fresh salt each time (same password, different hash)', async () => {
+    expect(await hashPassword('books123')).not.toBe(await hashPassword('books123'));
   });
 
-  it('verifies the correct password and rejects a wrong one', () => {
-    const stored = hashPassword('compiler');
-    expect(verifyPassword('compiler', stored)).toBe(true);
-    expect(verifyPassword('Compiler', stored)).toBe(false);
-    expect(verifyPassword('', stored)).toBe(false);
+  it('verifies the correct password and rejects a wrong one', async () => {
+    const stored = await hashPassword('compiler');
+    expect(await verifyPassword('compiler', stored)).toBe(true);
+    expect(await verifyPassword('Compiler', stored)).toBe(false);
+    expect(await verifyPassword('', stored)).toBe(false);
   });
 
-  it('rejects malformed stored values without throwing', () => {
-    expect(verifyPassword('x', 'not-a-valid-hash')).toBe(false);
-    expect(verifyPassword('x', '')).toBe(false);
+  it('rejects malformed stored values without throwing', async () => {
+    expect(await verifyPassword('x', 'not-a-valid-hash')).toBe(false);
+    expect(await verifyPassword('x', '')).toBe(false);
   });
 });
 

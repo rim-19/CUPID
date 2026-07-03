@@ -279,6 +279,8 @@ async function finalizeOrder(orderId) {
     });
     downloads.push({ title: it.titleSnapshot, url: '/api/downloads/' + raw });
   }
+  // Receipt (with download links) - the guest's only record of the purchase.
+  await mailer.orderReceiptEmail(order.email, order, downloads).catch(() => {});
   return { order, downloads, claimed: true };
 }
 
@@ -495,6 +497,15 @@ router.get('/admin/audit', auth.requireAdmin, ah(async (_req, res) => {
 }));
 
 /* ============================== BOOKS ============================== */
+const BOOK_SORTS = {
+  newest: [{ createdAt: 'desc' }],
+  oldest: [{ createdAt: 'asc' }],
+  'price-asc': [{ priceCents: 'asc' }],
+  'price-desc': [{ priceCents: 'desc' }],
+  rating: [{ ratingAvg: 'desc' }, { reviewCount: 'desc' }],
+  title: [{ title: 'asc' }],
+};
+
 router.get('/books', ah(async (req, res) => {
   const q = clamp(req.query.q, 100);
   const genre = clamp(req.query.genre, 40);
@@ -503,8 +514,14 @@ router.get('/books', ah(async (req, res) => {
   if (q) {
     where.OR = ['title', 'author', 'notes', 'genre'].map((f) => ({ [f]: { contains: q, mode: 'insensitive' } }));
   }
-  const books = await prisma.book.findMany({ where, orderBy: { createdAt: 'asc' } });
-  res.json({ books: books.map(publicBook) });
+  const orderBy = BOOK_SORTS[String(req.query.sort || '')] || [{ createdAt: 'asc' }];
+  const limit = Math.max(1, Math.min(60, parseInt(req.query.limit, 10) || 24));
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const [total, books] = await Promise.all([
+    prisma.book.count({ where }),
+    prisma.book.findMany({ where, orderBy, skip: (page - 1) * limit, take: limit }),
+  ]);
+  res.json({ books: books.map(publicBook), total, page, limit });
 }));
 
 router.get('/books/genres', ah(async (_req, res) => {
@@ -677,11 +694,18 @@ router.get('/cart', ah(async (req, res) => {
   res.json({ cart: cartLines(await getCart(req)) });
 }));
 
+/* Resolve a cart reference to a book: by id when provided (exact, so duplicate
+   titles never collide), otherwise by title (legacy/decorative paths). */
+async function findBookRef(ref) {
+  if (ref && ref.bookId) return prisma.book.findUnique({ where: { id: String(ref.bookId) } }).catch(() => null);
+  const title = clamp(ref && ref.title, 120);
+  if (title) return prisma.book.findFirst({ where: { title } });
+  return null;
+}
+
 router.post('/cart', ah(async (req, res) => {
-  const title = clamp(req.body.title, 120);
-  if (!title) return res.status(400).json({ error: 'A title is required.' });
   const requested = Math.max(1, Math.min(QTY_CAP, parseInt(req.body.qty, 10) || 1));
-  const book = await prisma.book.findFirst({ where: { title } });
+  const book = await findBookRef(req.body);
   if (!book) return res.status(404).json({ error: 'We could not find that book.' });
   if (book.stock <= 0) return res.status(409).json({ error: 'That title is out of stock.' });
   const cart = await getCart(req);
@@ -697,12 +721,10 @@ router.post('/cart', ah(async (req, res) => {
 }));
 
 router.patch('/cart', ah(async (req, res) => {
-  const title = clamp(req.body.title, 120);
-  const book = await prisma.book.findFirst({ where: { title } });
+  const book = await findBookRef(req.body);
   const cart = await getCart(req);
   if (book) {
-    const max = book.stock;
-    const qty = Math.max(0, Math.min(parseInt(req.body.qty, 10) || 0, QTY_CAP, max));
+    const qty = Math.max(0, Math.min(parseInt(req.body.qty, 10) || 0, QTY_CAP, book.stock));
     if (qty <= 0) {
       await prisma.cartItem.deleteMany({ where: { cartId: cart.id, bookId: book.id } });
     } else {
@@ -716,9 +738,11 @@ router.patch('/cart', ah(async (req, res) => {
   res.json({ cart: cartLines(await getCart(req)) });
 }));
 
-router.delete('/cart/:title', ah(async (req, res) => {
+/* :ref is a bookId (preferred) or, for legacy links, a title. */
+router.delete('/cart/:ref', ah(async (req, res) => {
   const cart = await getCart(req);
-  const book = await prisma.book.findFirst({ where: { title: req.params.title } });
+  const ref = req.params.ref;
+  const book = (await prisma.book.findUnique({ where: { id: ref } }).catch(() => null)) || (await prisma.book.findFirst({ where: { title: ref } }));
   if (book) await prisma.cartItem.deleteMany({ where: { cartId: cart.id, bookId: book.id } });
   res.json({ cart: cartLines(await getCart(req)) });
 }));

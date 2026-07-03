@@ -363,7 +363,7 @@ var App = {
           if (a === 'add-cart') {
             e.preventDefault();
             var info = self.readBookInfo(actEl);
-            if (info) { Store.addToCart(info.title, info.price); self.burst(e.clientX, e.clientY); self.announce(info.title + ' added to your bag'); self.openDrawer('cart'); }
+            if (info) { Store.addToCart(info.id, info.title, info.price); self.burst(e.clientX, e.clientY); self.announce(info.title + ' added to your bag'); self.openDrawer('cart'); }
             return;
           }
           if (a === 'wish') {
@@ -532,6 +532,7 @@ var App = {
 
     /* ---------- BOOK INFO (for cart / wishlist) ---------- */
     readBookInfo: function (el) {
+      var id = el.getAttribute('data-book-id');
       var title = el.getAttribute('data-title');
       var price = el.getAttribute('data-price');
       if (!title && el.closest) {
@@ -540,10 +541,10 @@ var App = {
       }
       if (!title && el.closest) {
         var card = el.closest('[data-book], article, li');
-        if (card) { var tt = card.querySelector('[data-mtitle],[data-qtitle],h3,h4'); if (tt) title = tt.textContent; }
+        if (card) { if (!id) id = card.getAttribute('data-book-id'); var tt = card.querySelector('[data-mtitle],[data-qtitle],h3,h4'); if (tt) title = tt.textContent; }
       }
       if (!title) return null;
-      return { title: String(title).trim(), price: String(price || '$0').trim() };
+      return { id: id || null, title: String(title).trim(), price: String(price || '$0').trim() };
     },
 
     _esc: function (s) {
@@ -553,9 +554,9 @@ var App = {
       for (var i = 0; i < catalog.length; i++) { if (catalog[i].title === title) return catalog[i].price; }
       return '$0';
     },
-    _findLine: function (title) {
+    _findLine: function (key) {
       var lines = Store.cartLines();
-      for (var i = 0; i < lines.length; i++) { if (lines[i].title === title) return lines[i]; }
+      for (var i = 0; i < lines.length; i++) { if ((lines[i].bookId || lines[i].title) === key) return lines[i]; }
       return null;
     },
     _emptyState: function (title, sub) {
@@ -622,7 +623,7 @@ var App = {
         var rm = t.closest && t.closest('[data-qremove]');
         if (rm) { Store.removeFromCart(rm.getAttribute('data-qremove')); self.announce('Removed from bag'); return; }
         var w2c = t.closest && t.closest('[data-wishadd]');
-        if (w2c) { var wt = w2c.getAttribute('data-wishadd'); Store.addToCart(wt, w2c.getAttribute('data-wishprice') || '$0'); Store.toggleWish(wt); self._drawerTab = 'cart'; self.renderDrawer(); self.announce(wt + ' moved to bag'); return; }
+        if (w2c) { var wt = w2c.getAttribute('data-wishadd'); Store.addToCart(null, wt, w2c.getAttribute('data-wishprice') || '$0'); Store.toggleWish(wt); self._drawerTab = 'cart'; self.renderDrawer(); self.announce(wt + ' moved to bag'); return; }
         var wrm = t.closest && t.closest('[data-wishremove]');
         if (wrm) { Store.toggleWish(wrm.getAttribute('data-wishremove')); return; }
         if (t.closest && t.closest('[data-drawer-checkout]')) { self._checkout(); return; }
@@ -650,14 +651,15 @@ var App = {
         var lines = Store.cartLines();
         if (!lines.length) { body.innerHTML = this._emptyState('Your bag is empty.', 'Add a book and it will steep here.'); return; }
         body.innerHTML = lines.map(function (c) {
+          var key = c.bookId || c.title;
           return '<div class="drawer-line">' +
             '<div class="drawer-line-main"><div class="drawer-line-title">' + self._esc(c.title) + '</div><div class="drawer-line-price">' + self._esc(c.price) + '</div></div>' +
             '<div class="drawer-qty">' +
-              '<button data-qdec="' + self._esc(c.title) + '" aria-label="Decrease quantity">-</button>' +
+              '<button data-qdec="' + self._esc(key) + '" aria-label="Decrease quantity">-</button>' +
               '<span>' + c.qty + '</span>' +
-              '<button data-qinc="' + self._esc(c.title) + '" aria-label="Increase quantity">+</button>' +
+              '<button data-qinc="' + self._esc(key) + '" aria-label="Increase quantity">+</button>' +
             '</div>' +
-            '<button class="drawer-rm" data-qremove="' + self._esc(c.title) + '" aria-label="Remove">remove</button>' +
+            '<button class="drawer-rm" data-qremove="' + self._esc(key) + '" aria-label="Remove">remove</button>' +
           '</div>';
         }).join('');
       } else {
@@ -766,7 +768,7 @@ var App = {
           return;
         }
         var add = t.closest && t.closest('[data-search-add]');
-        if (add) { var rt = add.getAttribute('data-search-add'); Store.addToCart(rt, add.getAttribute('data-search-price') || '$0'); self.burst(e.clientX, e.clientY); self.announce(rt + ' added to your bag'); return; }
+        if (add) { var rt = add.getAttribute('data-search-add'); Store.addToCart(add.getAttribute('data-search-id') || null, rt, add.getAttribute('data-search-price') || '$0'); self.burst(e.clientX, e.clientY); self.announce(rt + ' added to your bag'); return; }
       };
       overlay.addEventListener('click', onClick);
       this._cleanup.push(function () { if (input) input.removeEventListener('input', onInput); overlay.removeEventListener('click', onClick); if (overlay.parentNode) overlay.parentNode.removeChild(overlay); self._search = null; });
@@ -786,7 +788,7 @@ var App = {
           '<span class="search-meta"><span class="search-title">' + self._esc(b.title) + '</span>' +
           '<span class="search-sub">' + self._esc(b.author) + ' &middot; ' + self._esc(b.genre || '') + ' &middot; ' + self._esc(b.roast) + ' roast</span></span>' +
           '<span class="search-price">' + self._esc(b.price) + '</span>' +
-          '<button class="search-add" data-search-add="' + self._esc(b.title) + '" data-search-price="' + self._esc(b.price) + '" aria-label="Add ' + self._esc(b.title) + ' to bag">Add</button>' +
+          '<button class="search-add" data-search-add="' + self._esc(b.title) + '"' + (b.id ? ' data-search-id="' + self._esc(b.id) + '"' : '') + ' data-search-price="' + self._esc(b.price) + '" aria-label="Add ' + self._esc(b.title) + ' to bag">Add</button>' +
         '</div>';
       }).join('');
     },

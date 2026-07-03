@@ -3,8 +3,10 @@ import { css } from '../lib/css.js';
 import { icon, Svg } from '../lib/icons.jsx';
 import { library } from '../lib/library';
 import { store } from '../lib/store';
+import { account } from '../lib/account';
 import { api } from '../lib/api.js';
 import { toast } from '../lib/toast';
+import { setBookMeta, clearBookMeta } from '../lib/seo.js';
 
 const STAR = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="display:block"><path d="M12 3.5l2.6 5.45 5.9.78-4.35 4.05 1.12 5.87L12 16.9l-5.27 2.75 1.12-5.87L3.5 9.73l5.9-.78z"/></svg>';
 const LABEL = 'font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mute)';
@@ -27,20 +29,31 @@ function Stat({ label, value }) {
 export default function BookModal({ open, id, onClose }) {
   const [qty, setQty] = useState(1);
   const [fetched, setFetched] = useState(null);
+  const [reviews, setReviews] = useState(null);
+  const [rForm, setRForm] = useState({ rating: 5, body: '' });
+  const [rBusy, setRBusy] = useState(false);
   const [, force] = useState(0);
 
   useEffect(() => library.subscribe(() => force((n) => n + 1)), []);
   useEffect(() => store.subscribe(() => force((n) => n + 1)), []);
+  useEffect(() => account.subscribe(() => force((n) => n + 1)), []);
 
   useEffect(() => {
     if (!open) return;
     setQty(1);
     setFetched(null);
+    setReviews(null);
+    setRForm({ rating: 5, body: '' });
+    const lastFocus = document.activeElement; // restore focus to the trigger on close
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+      if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+    };
   }, [open, id, onClose]);
 
   const all = library.getBooks();
@@ -54,6 +67,25 @@ export default function BookModal({ open, id, onClose }) {
     api.get('/books/' + encodeURIComponent(id)).then((r) => { if (alive && r && r.book) setFetched(r.book); }).catch(() => {});
     return () => { alive = false; };
   }, [open, id, book]);
+
+  // Per-book page metadata (title / description / OG / JSON-LD).
+  useEffect(() => {
+    if (!open || !book) return;
+    setBookMeta(book);
+    return () => clearBookMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, book && book.id]);
+
+  // Load reviews once the book is known.
+  useEffect(() => {
+    if (!open || !book) return;
+    let alive = true;
+    api.get('/books/' + encodeURIComponent(book.id) + '/reviews')
+      .then((r) => { if (alive) setReviews((r && r.reviews) || []); })
+      .catch(() => { if (alive) setReviews([]); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, book && book.id]);
 
   if (!open) return null;
 
@@ -103,7 +135,7 @@ export default function BookModal({ open, id, onClose }) {
 
   const addToCart = () => {
     if (!hasStock) return;
-    store.addToCart(book.title, book.price, qty);
+    store.addToCart(book.id || null, book.title, book.price, qty);
     toast.success(qty > 1 ? qty + ' copies of ' + book.title + ' added to your bag.' : book.title + ' added to your bag.');
   };
   const toggleWish = () => {
@@ -111,6 +143,28 @@ export default function BookModal({ open, id, onClose }) {
     toast.success(added ? book.title + ' saved to your wishlist.' : book.title + ' removed from your wishlist.');
   };
   const stepQty = (d) => setQty((q) => Math.min(maxQty, Math.max(1, q + d)));
+
+  const user = account.current();
+  const fmtDate = (ts) => { try { return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
+  const stars = (n) => [0, 1, 2, 3, 4].map((i) => (
+    <span key={i} style={{ display: 'inline-grid', color: i < n ? 'var(--accent-2)' : 'var(--line)' }}><Svg as="span" html={STAR} /></span>
+  ));
+  const submitReview = async (e) => {
+    e.preventDefault();
+    if (rBusy) return;
+    setRBusy(true);
+    try {
+      await api.post('/books/' + encodeURIComponent(book.id) + '/reviews', { rating: rForm.rating, body: rForm.body.trim() });
+      const r = await api.get('/books/' + encodeURIComponent(book.id) + '/reviews');
+      setReviews((r && r.reviews) || []);
+      setRForm({ rating: 5, body: '' });
+      library.init(); // refresh the catalog so the new average/count shows
+      toast.success('Thanks for your review!');
+    } catch (err) {
+      toast.error((err && err.data && err.data.error) || 'Could not post your review.');
+    }
+    setRBusy(false);
+  };
 
   return shell(
     <div style={css('position:relative')}>
@@ -190,6 +244,47 @@ export default function BookModal({ open, id, onClose }) {
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div style={css('border-top:1px solid var(--line-soft);padding:24px 30px')}>
+        <div style={css(LABEL + ';margin-bottom:14px')}>Reviews {reviews ? '(' + reviews.length + ')' : ''}</div>
+        {reviews === null ? (
+          <div style={css('color:var(--ink-mute);font-family:var(--mono);font-size:12px')}>Loading reviews...</div>
+        ) : reviews.length === 0 ? (
+          <div style={css('color:var(--ink-soft);font-size:13.5px;margin-bottom:16px')}>No reviews yet. Be the first to share your thoughts.</div>
+        ) : (
+          <div style={css('display:flex;flex-direction:column;gap:12px;margin-bottom:18px')}>
+            {reviews.map((rv) => (
+              <div key={rv.id} style={css('border:1px solid var(--line-soft);border-radius:12px;padding:13px 15px')}>
+                <div style={css('display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px')}>
+                  <div style={css('display:flex;align-items:center;gap:8px;flex-wrap:wrap')}>
+                    <span style={css('font:600 13.5px/1 var(--sans);color:var(--ink)')}>{rv.author}</span>
+                    {rv.verifiedPurchase ? <span style={css('font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);border:1px solid var(--line);border-radius:99px;padding:2px 7px')}>Verified purchase</span> : null}
+                  </div>
+                  <span style={css('font-family:var(--mono);font-size:11px;color:var(--ink-mute)')}>{fmtDate(rv.createdAt)}</span>
+                </div>
+                <div style={css('display:flex;gap:1px;margin-bottom:6px')}>{stars(rv.rating)}</div>
+                {rv.body ? <p style={css('color:var(--ink-soft);font-size:13.5px;line-height:1.55;margin:0')}>{rv.body}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+        {user && user.verified ? (
+          <form onSubmit={submitReview} style={css('border:1px solid var(--line-soft);border-radius:12px;padding:14px 15px')}>
+            <div style={css(LABEL + ';margin-bottom:8px')}>Write a review</div>
+            <div style={css('display:flex;gap:3px;margin-bottom:10px')}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button type="button" key={n} aria-label={n + (n > 1 ? ' stars' : ' star')} onClick={() => setRForm((f) => ({ ...f, rating: n }))} style={css('background:transparent;border:none;cursor:pointer;padding:2px;color:' + (n <= rForm.rating ? 'var(--accent-2)' : 'var(--line)'))}><Svg as="span" style={{ display: 'inline-grid' }} html={STAR} /></button>
+              ))}
+            </div>
+            <textarea value={rForm.body} onChange={(e) => setRForm((f) => ({ ...f, body: e.target.value }))} placeholder="What did you think?" rows={3} style={css('width:100%;background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font:500 13.5px/1.4 var(--sans);outline:none;resize:vertical')} />
+            <button type="submit" disabled={rBusy} style={css(BTN + ';margin-top:10px' + (rBusy ? ';opacity:.6;cursor:default' : ''))}>{rBusy ? 'Posting...' : 'Post review'}</button>
+          </form>
+        ) : user ? (
+          <div style={css('color:var(--ink-soft);font-size:13px')}>Please confirm your email to write a review.</div>
+        ) : (
+          <a href="#signin" onClick={onClose} style={css('color:var(--accent);font-size:13.5px;text-decoration:none;font-weight:600')}>Sign in to write a review &rarr;</a>
+        )}
       </div>
 
       {related.length ? (

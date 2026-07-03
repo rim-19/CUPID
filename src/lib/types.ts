@@ -25,6 +25,7 @@ export interface Book {
 }
 
 export interface CartLine {
+  bookId?: string;
   title: string;
   price: string;
   qty: number;

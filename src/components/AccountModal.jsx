@@ -11,6 +11,15 @@ const GHOST = 'background:transparent;border:1px solid var(--line);color:var(--i
 const SECTION = 'border:1px solid var(--line-soft);border-radius:14px;padding:16px;margin-bottom:14px';
 const HEADING = 'font-family:var(--serif);font-size:15px;font-weight:700;margin:0 0 12px';
 
+const STATUS_META = {
+  PENDING: { label: 'Pending payment', color: 'var(--ink-mute)' },
+  PAID: { label: 'Paid', color: 'var(--accent-2)' },
+  FULFILLED: { label: 'Fulfilled', color: 'var(--accent-2)' },
+  SHIPPED: { label: 'Shipped', color: 'var(--accent)' },
+  CANCELLED: { label: 'Cancelled', color: 'var(--accent-3)' },
+  REFUNDED: { label: 'Refunded', color: 'var(--accent-3)' },
+};
+
 const money = (n) => {
   try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(n) || 0); }
   catch { return '$' + (Number(n) || 0).toFixed(2); }
@@ -44,11 +53,16 @@ export default function AccountModal({ open, onClose }) {
     setEmForm({ password: '', email: '' });
     setDelForm({ password: '', confirm: false });
     setPwErr(''); setEmErr(''); setDelErr('');
+    const lastFocus = document.activeElement; // restore focus to the trigger on close
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+      if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+    };
   }, [open, onClose]);
 
   useEffect(() => {
@@ -207,8 +221,15 @@ export default function AccountModal({ open, onClose }) {
                 <div style={css('display:flex;flex-direction:column;gap:12px')}>
                   {orders.map((o) => (
                     <div key={o.id} style={css(SECTION + ';margin-bottom:0')}>
-                      <div style={css('display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px')}>
-                        <div style={css('font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)')}>{when(o.createdAt)}</div>
+                      <div style={css('display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px')}>
+                        <div style={css('display:flex;align-items:center;gap:9px;flex-wrap:wrap')}>
+                          <span style={css('font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)')}>{when(o.createdAt)}</span>
+                          {(() => { const s = STATUS_META[o.status] || { label: o.status || 'Placed', color: 'var(--ink-mute)' }; return (
+                            <span style={css('display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:' + s.color)}>
+                              <span style={css('width:6px;height:6px;border-radius:50%;background:' + s.color)} />{s.label}
+                            </span>
+                          ); })()}
+                        </div>
                         <div style={css('font-family:var(--serif);font-size:17px;font-weight:700;color:var(--accent)')}>{money(o.total)}</div>
                       </div>
                       <div style={css('display:flex;flex-direction:column;gap:4px')}>

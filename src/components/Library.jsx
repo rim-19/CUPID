@@ -3,7 +3,17 @@ import { css } from '../lib/css.js';
 import { icon, Svg } from '../lib/icons.jsx';
 import { library } from '../lib/library';
 import { store } from '../lib/store';
+import { api } from '../lib/api.js';
 import AdminPanel from './AdminPanel.jsx';
+
+const SORTS = [
+  { v: 'newest', label: 'Newest' },
+  { v: 'rating', label: 'Top rated' },
+  { v: 'price-asc', label: 'Price: low to high' },
+  { v: 'price-desc', label: 'Price: high to low' },
+  { v: 'title', label: 'Title A–Z' },
+];
+const PAGE_SIZE = 24;
 
 const STAR = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="display:block"><path d="M12 3.5l2.6 5.45 5.9.78-4.35 4.05 1.12 5.87L12 16.9l-5.27 2.75 1.12-5.87L3.5 9.73l5.9-.78z"/></svg>';
 
@@ -42,7 +52,7 @@ function BookCard({ b }) {
           </div>
           <div style={css('font-family:var(--serif);font-size:18px;font-weight:700;margin-top:3px;font-optical-sizing:auto')}>{b.price}</div>
         </div>
-        <button data-action="add-cart" data-title={b.title} data-price={b.price} aria-label={'Add ' + b.title + ' to bag'} style={css('padding:10px 16px;border-radius:99px;background:var(--ink);color:var(--bg);border:none;font-weight:700;font-size:13.5px;cursor:pointer;transition:.2s;white-space:nowrap')}>Add to cart</button>
+        <button data-action="add-cart" data-book-id={b.id} data-title={b.title} data-price={b.price} aria-label={'Add ' + b.title + ' to bag'} style={css('padding:10px 16px;border-radius:99px;background:var(--ink);color:var(--bg);border:none;font-weight:700;font-size:13.5px;cursor:pointer;transition:.2s;white-space:nowrap')}>Add to cart</button>
       </div>
     </div>
   );
@@ -51,12 +61,36 @@ function BookCard({ b }) {
 export default function Library({ open, genre, adminOpen, onClose }) {
   const [activeGenre, setActiveGenre] = useState(genre || 'All');
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState({ books: [], total: 0, loading: true });
   const [admin, setAdmin] = useState(Boolean(adminOpen));
   const [, force] = useState(0);
 
   useEffect(() => library.subscribe(() => force((n) => n + 1)), []);
   useEffect(() => { if (open) setActiveGenre(genre || 'All'); }, [genre, open]);
   useEffect(() => { if (open) setAdmin(Boolean(adminOpen)); }, [adminOpen, open]);
+  // Any filter change resets to the first page.
+  useEffect(() => { setPage(1); }, [query, activeGenre, sort]);
+
+  // API-backed search: debounced so it scales past the in-memory catalog.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setData((d) => ({ ...d, loading: true }));
+    const t = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set('q', query.trim());
+      if (activeGenre && activeGenre !== 'All') params.set('genre', activeGenre);
+      params.set('sort', sort);
+      params.set('page', String(page));
+      params.set('limit', String(PAGE_SIZE));
+      api.get('/books?' + params.toString())
+        .then((r) => { if (alive) setData({ books: r.books || [], total: r.total || 0, loading: false }); })
+        .catch(() => { if (alive) setData({ books: [], total: 0, loading: false }); });
+    }, 220);
+    return () => { alive = false; clearTimeout(t); };
+  }, [open, query, activeGenre, sort, page]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,22 +110,16 @@ export default function Library({ open, genre, adminOpen, onClose }) {
 
   if (!open) return null;
 
-  const books = library.getBooks();
   const genres = library.genres();
   const effective = activeGenre === 'All' || genres.includes(activeGenre) ? activeGenre : 'All';
-  const q = query.trim().toLowerCase();
-  const filtered = books.filter((b) => {
-    if (effective !== 'All' && b.genre !== effective) return false;
-    if (q) {
-      const hay = (b.title + ' ' + b.author + ' ' + (b.notes || '') + ' ' + (b.genre || '')).toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
   const chips = ['All', ...genres];
+  const books = data.books;
+  const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
 
   const chipStyle = (on) =>
     css('padding:8px 15px;border-radius:99px;border:1px solid ' + (on ? 'var(--accent)' : 'var(--line)') + ';background:' + (on ? 'var(--accent)' : 'transparent') + ';color:' + (on ? 'var(--accent-ink)' : 'var(--ink-soft)') + ';font:600 13px/1 var(--sans);cursor:pointer;white-space:nowrap;transition:.2s');
+  const pageBtn = (disabled) =>
+    css('padding:9px 16px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);font:600 13px/1 var(--sans);cursor:pointer' + (disabled ? ';opacity:.4;cursor:default' : ''));
 
   return (
     <div style={css('position:fixed;inset:0;z-index:8000;background:var(--bg);color:var(--ink);overflow:auto;animation:libIn .32s var(--ease)')}>
@@ -100,7 +128,7 @@ export default function Library({ open, genre, adminOpen, onClose }) {
           <div style={css('display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap')}>
             <div style={css('display:flex;align-items:baseline;gap:12px')}>
               <div style={css('font-family:var(--serif);font-size:clamp(24px,4vw,34px);font-weight:700;letter-spacing:-.02em')}>The Library</div>
-              <div style={css('font-family:var(--mono);font-size:12px;color:var(--ink-mute);letter-spacing:.04em')}>{filtered.length} {filtered.length === 1 ? 'title' : 'titles'}</div>
+              <div style={css('font-family:var(--mono);font-size:12px;color:var(--ink-mute);letter-spacing:.04em')}>{data.total} {data.total === 1 ? 'title' : 'titles'}</div>
             </div>
             <div style={css('display:flex;align-items:center;gap:10px')}>
               <button type="button" onClick={() => setAdmin(true)} style={css('display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:99px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);font:600 13px/1 var(--sans);cursor:pointer;transition:.2s')}>
@@ -118,6 +146,10 @@ export default function Library({ open, genre, adminOpen, onClose }) {
                 <button key={g} type="button" onClick={() => setActiveGenre(g)} style={chipStyle(effective === g)}>{g}</button>
               ))}
             </div>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort books"
+              style={css('flex-shrink:0;background:var(--bg-1);border:1px solid var(--line);border-radius:99px;padding:9px 14px;color:var(--ink);font:600 13px/1 var(--sans);outline:none;cursor:pointer')}>
+              {SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+            </select>
             <div style={css('position:relative;flex-shrink:0')}>
               <span style={css('position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-mute);display:grid')}>
                 <Svg as="span" style={{ display: 'inline-grid' }} html={icon('search', 15, 1.8)} />
@@ -130,10 +162,21 @@ export default function Library({ open, genre, adminOpen, onClose }) {
       </header>
 
       <div style={css('max-width:1240px;margin:0 auto;padding:28px')}>
-        {filtered.length ? (
-          <div style={css('display:grid;grid-template-columns:repeat(auto-fill,minmax(218px,1fr));gap:24px')}>
-            {filtered.map((b, i) => <BookCard key={b.title + i} b={b} />)}
-          </div>
+        {books.length ? (
+          <>
+            <div style={css('display:grid;grid-template-columns:repeat(auto-fill,minmax(218px,1fr));gap:24px' + (data.loading ? ';opacity:.55;transition:opacity .2s' : ''))}>
+              {books.map((b) => <BookCard key={b.id || b.title} b={b} />)}
+            </div>
+            {totalPages > 1 ? (
+              <div style={css('display:flex;align-items:center;justify-content:center;gap:16px;margin-top:34px')}>
+                <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={pageBtn(page <= 1)}>Previous</button>
+                <span style={css('font-family:var(--mono);font-size:12.5px;color:var(--ink-mute)')}>Page {page} of {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={pageBtn(page >= totalPages)}>Next</button>
+              </div>
+            ) : null}
+          </>
+        ) : data.loading ? (
+          <div style={css('text-align:center;padding:90px 20px;color:var(--ink-mute);font-family:var(--mono);font-size:13px')}>Loading the shelves...</div>
         ) : (
           <div style={css('text-align:center;padding:90px 20px;color:var(--ink-mute)')}>
             <div style={css('font-family:var(--serif);font-size:24px;color:var(--ink-soft);margin-bottom:8px')}>Nothing on this shelf yet.</div>

@@ -61,7 +61,7 @@ export default function Arrivals() {
                   </div>
                   <div style={css('font-family:var(--serif);font-size:18px;font-weight:700;margin-top:3px;font-optical-sizing:auto')}>{b.price}</div>
                 </div>
-                <button data-action="add-cart" data-title={b.title} data-price={b.price} aria-label={'Add ' + b.title + ' to bag'} style={css('padding:10px 16px;border-radius:99px;background:var(--ink);color:var(--bg);border:none;font-weight:700;font-size:13.5px;cursor:pointer;transition:.2s;white-space:nowrap')}>Add to cart</button>
+                <button data-action="add-cart" data-book-id={b.id} data-title={b.title} data-price={b.price} aria-label={'Add ' + b.title + ' to bag'} style={css('padding:10px 16px;border-radius:99px;background:var(--ink);color:var(--bg);border:none;font-weight:700;font-size:13.5px;cursor:pointer;transition:.2s;white-space:nowrap')}>Add to cart</button>
               </div>
             </div>
           ))}
